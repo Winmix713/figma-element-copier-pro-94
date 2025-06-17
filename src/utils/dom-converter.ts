@@ -4,7 +4,7 @@ import { ColorParser } from './color-parser';
 
 export class DOMConverter {
   private options: ConversionOptions;
-  private processedElements = new WeakSet<HTMLElement>();
+  private processedElements: WeakSet<HTMLElement>;
 
   constructor(options: ConversionOptions = {}) {
     this.options = {
@@ -13,10 +13,12 @@ export class DOMConverter {
       maxDepth: 10,
       ...options,
     };
+    this.processedElements = new WeakSet<HTMLElement>();
   }
 
   convertElement(element: HTMLElement): FigmaNode[] {
-    this.processedElements.clear();
+    // Reset processed elements by creating a new WeakSet
+    this.processedElements = new WeakSet<HTMLElement>();
     return this.processElementRecursive(element, 0);
   }
 
