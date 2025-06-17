@@ -1,0 +1,15 @@
+
+{
+  "name": "web-to-figma-plugin",
+  "version": "1.0.0",
+  "description": "Convert web elements to Figma components",
+  "main": "code.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.75.0",
+    "typescript": "^5.0.0"
+  }
+}

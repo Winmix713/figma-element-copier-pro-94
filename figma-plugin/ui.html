@@ -1,0 +1,172 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Web to Figma Converter</title>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      margin: 0;
+      padding: 16px;
+      background: var(--figma-color-bg);
+      color: var(--figma-color-text);
+    }
+    
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .status {
+      padding: 12px;
+      border-radius: 6px;
+      text-align: center;
+      font-weight: 500;
+    }
+    
+    .status.waiting {
+      background: var(--figma-color-bg-secondary);
+      border: 1px solid var(--figma-color-border);
+    }
+    
+    .status.success {
+      background: #2d7d32;
+      color: white;
+    }
+    
+    .status.error {
+      background: #d32f2f;
+      color: white;
+    }
+    
+    .instructions {
+      font-size: 11px;
+      line-height: 1.4;
+      color: var(--figma-color-text-secondary);
+    }
+    
+    .button {
+      background: var(--figma-color-bg-brand);
+      color: var(--figma-color-text-onbrand);
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    
+    .button:hover {
+      opacity: 0.9;
+    }
+    
+    .button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .logs {
+      background: var(--figma-color-bg-secondary);
+      border: 1px solid var(--figma-color-border);
+      border-radius: 6px;
+      padding: 8px;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 10px;
+      max-height: 100px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="status waiting" id="status">
+      Ready to receive data from web
+    </div>
+    
+    <div class="instructions">
+      <strong>How to use:</strong><br>
+      1. Open your web application<br>
+      2. Click "Export to Figma" button<br>
+      3. Elements will be created automatically
+    </div>
+    
+    <button class="button" id="getSelection">
+      Get Current Selection
+    </button>
+    
+    <div class="logs" id="logs">
+      Plugin initialized...<br>
+    </div>
+  </div>
+
+  <script>
+    // UI JavaScript code
+    const statusEl = document.getElementById('status');
+    const logsEl = document.getElementById('logs');
+    const getSelectionBtn = document.getElementById('getSelection');
+    
+    // Add log function
+    function addLog(message) {
+      const timestamp = new Date().toLocaleTimeString();
+      logsEl.innerHTML += `[${timestamp}] ${message}<br>`;
+      logsEl.scrollTop = logsEl.scrollHeight;
+    }
+    
+    // Update status
+    function updateStatus(message, type = 'waiting') {
+      statusEl.textContent = message;
+      statusEl.className = `status ${type}`;
+    }
+    
+    // Listen for messages from the plugin code
+    window.addEventListener('message', (event) => {
+      const msg = event.data.pluginMessage;
+      
+      if (msg.type === 'NODES_CREATED') {
+        if (msg.success) {
+          updateStatus(`✅ Successfully created ${msg.count} elements!`, 'success');
+          addLog(`Created ${msg.count} Figma nodes successfully`);
+        } else {
+          updateStatus(`❌ Error: ${msg.error}`, 'error');
+          addLog(`Error creating nodes: ${msg.error}`);
+        }
+      }
+      
+      if (msg.type === 'SELECTION_DATA') {
+        addLog(`Current selection: ${msg.selection.length} items`);
+        msg.selection.forEach(item => {
+          addLog(`- ${item.name} (${item.type})`);
+        });
+      }
+    });
+    
+    // Get selection button
+    getSelectionBtn.addEventListener('click', () => {
+      parent.postMessage({ 
+        pluginMessage: { type: 'GET_SELECTION' } 
+      }, '*');
+    });
+    
+    // Listen for messages from the web application
+    window.addEventListener('message', (event) => {
+      if (event.data.pluginMessage) {
+        addLog('Received message from plugin code');
+      } else if (event.data.type === 'CREATE_NODES') {
+        addLog('Received nodes data from web application');
+        updateStatus('Processing elements...', 'waiting');
+        
+        // Forward to plugin code
+        parent.postMessage({ 
+          pluginMessage: event.data 
+        }, '*');
+      }
+    });
+    
+    addLog('UI ready, waiting for web data...');
+  </script>
+</body>
+</html>
