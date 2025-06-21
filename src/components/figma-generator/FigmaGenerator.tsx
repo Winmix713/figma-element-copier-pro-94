@@ -1,12 +1,7 @@
-
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import type { FigmaApiResponse, GeneratedComponent } from "@/types/figma";
-import type {
-  CodeGenerationOptions,
-  CustomCodeInputs,
-} from "@/types/generation";
+import type { FigmaApiResponse, GeneratedComponent, CodeGenerationOptions, CustomCodeInputs } from "@/types/figma";
 import { EnhancedCodeGenerationPanel } from "../enhanced-code-generation-panel";
 import { FileInput } from "./FileInput";
 import { DebugPanel } from "./DebugPanel";

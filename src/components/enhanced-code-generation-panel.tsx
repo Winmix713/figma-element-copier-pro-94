@@ -1,7 +1,6 @@
 
 import React from 'react';
-import { FigmaApiResponse } from '@/types/figma';
-import { CodeGenerationOptions, CustomCodeInputs } from '@/services/enhanced-code-generator';
+import { FigmaApiResponse, CodeGenerationOptions, CustomCodeInputs } from '@/types/figma';
 
 interface EnhancedCodeGenerationPanelProps {
   figmaData: FigmaApiResponse;

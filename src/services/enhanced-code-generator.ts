@@ -1,25 +1,5 @@
 
-import { FigmaApiResponse, GeneratedComponent, ComponentMetadata } from '@/types/figma';
-
-export interface CodeGenerationOptions {
-  framework: 'react' | 'vue' | 'html';
-  styling: 'tailwind' | 'css-modules' | 'styled-components' | 'plain-css';
-  typescript: boolean;
-  accessibility: boolean;
-  responsive: boolean;
-  optimizeImages: boolean;
-  generateStorybook: boolean;
-  generateTests: boolean;
-}
-
-export interface CustomCodeInputs {
-  jsx?: string;
-  css?: string;
-  cssAdvanced?: string;
-  typescript?: string;
-  tests?: string;
-  storybook?: string;
-}
+import { FigmaApiResponse, GeneratedComponent, ComponentMetadata, CodeGenerationOptions, CustomCodeInputs } from '@/types/figma';
 
 export class EnhancedCodeGenerator {
   private figmaData: FigmaApiResponse;

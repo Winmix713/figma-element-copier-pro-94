@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -111,7 +112,7 @@ export function QualityReport({ component }: QualityReportProps) {
       </div>
 
       {/* Accessibility Issues */}
-      {accessibility.issues.length > 0 && (
+      {accessibility.issues && accessibility.issues.length > 0 && (
         <div className="mb-6">
           <h5 className="text-md font-semibold text-gray-900 mb-3">Accessibility Problémák</h5>
           <div className="space-y-2">
@@ -122,8 +123,12 @@ export function QualityReport({ component }: QualityReportProps) {
                   <IssueIcon className={cn("w-5 h-5 mt-0.5", getIssueColor(issue.type))} />
                   <div className="flex-1">
                     <div className="font-medium text-gray-900">{issue.message}</div>
-                    <div className="text-sm text-gray-600">Elem: {issue.element}</div>
-                    <div className="text-sm text-blue-600 mt-1">Javítás: {issue.fix}</div>
+                    {issue.element && (
+                      <div className="text-sm text-gray-600">Elem: {issue.element}</div>
+                    )}
+                    {issue.fix && (
+                      <div className="text-sm text-blue-600 mt-1">Javítás: {issue.fix}</div>
+                    )}
                   </div>
                 </div>
               );
@@ -133,7 +138,7 @@ export function QualityReport({ component }: QualityReportProps) {
       )}
 
       {/* Suggestions */}
-      {accessibility.suggestions.length > 0 && (
+      {accessibility.suggestions && accessibility.suggestions.length > 0 && (
         <div className="mb-6">
           <h5 className="text-md font-semibold text-gray-900 mb-3">Javaslatok</h5>
           <div className="space-y-2">
@@ -163,7 +168,7 @@ export function QualityReport({ component }: QualityReportProps) {
         </div>
         <div>
           <div className="text-gray-600">Függőségek</div>
-          <div className="font-medium">{metadata.dependencies.length} db</div>
+          <div className="font-medium">{metadata.dependencies?.length || 0} db</div>
         </div>
       </div>
     </div>

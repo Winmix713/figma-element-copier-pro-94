@@ -32,7 +32,7 @@ export interface AccessibilityReport {
 
 export interface AccessibilityIssue {
   type: 'error' | 'warning' | 'info';
-  description: string;
+  message: string;
   element?: string;
   fix?: string;
 }
