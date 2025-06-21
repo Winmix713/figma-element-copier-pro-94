@@ -2,6 +2,8 @@
 import { FigmaColor } from '@/types/figma';
 
 export class ColorParser {
+  private static cssVariableCache = new Map<string, string>();
+
   private static hexToRgb(hex: string): FigmaColor | null {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return result ? {
@@ -67,6 +69,32 @@ export class ColorParser {
     };
   }
 
+  private static parseCssVariable(varString: string): string | null {
+    const varMatch = varString.match(/var\((--[^,)]+)(?:,([^)]+))?\)/);
+    if (!varMatch) return null;
+
+    const variableName = varMatch[1];
+    const fallback = varMatch[2]?.trim();
+
+    // Check cache first
+    if (this.cssVariableCache.has(variableName)) {
+      return this.cssVariableCache.get(variableName)!;
+    }
+
+    // Try to get from CSS custom properties
+    const computedValue = getComputedStyle(document.documentElement)
+      .getPropertyValue(variableName)
+      .trim();
+
+    if (computedValue) {
+      this.cssVariableCache.set(variableName, computedValue);
+      return computedValue;
+    }
+
+    // Return fallback if available
+    return fallback || null;
+  }
+
   static parse(colorString: string): FigmaColor {
     if (!colorString || colorString === 'transparent') {
       return { r: 0, g: 0, b: 0, a: 0 };
@@ -74,6 +102,15 @@ export class ColorParser {
 
     // Normalize color string
     const normalized = colorString.trim().toLowerCase();
+
+    // Handle CSS variables
+    if (normalized.startsWith('var(')) {
+      const resolvedColor = this.parseCssVariable(colorString);
+      if (resolvedColor) {
+        return this.parse(resolvedColor);
+      }
+      return { r: 0, g: 0, b: 0, a: 0 };
+    }
 
     // Handle hex colors
     if (normalized.startsWith('#')) {
@@ -91,16 +128,20 @@ export class ColorParser {
       return this.hslToFigma(normalized);
     }
 
-    // Handle named colors (basic set)
+    // Handle named colors (expanded set)
     const namedColors: Record<string, FigmaColor> = {
       'black': { r: 0, g: 0, b: 0 },
       'white': { r: 1, g: 1, b: 1 },
       'red': { r: 1, g: 0, b: 0 },
-      'green': { r: 0, g: 1, b: 0 },
+      'green': { r: 0, g: 0.5, b: 0 },
       'blue': { r: 0, g: 0, b: 1 },
       'yellow': { r: 1, g: 1, b: 0 },
       'cyan': { r: 0, g: 1, b: 1 },
       'magenta': { r: 1, g: 0, b: 1 },
+      'gray': { r: 0.5, g: 0.5, b: 0.5 },
+      'grey': { r: 0.5, g: 0.5, b: 0.5 },
+      'orange': { r: 1, g: 0.647, b: 0 },
+      'purple': { r: 0.5, g: 0, b: 0.5 },
       'transparent': { r: 0, g: 0, b: 0, a: 0 },
     };
 
@@ -109,5 +150,18 @@ export class ColorParser {
 
   static isTransparent(color: FigmaColor): boolean {
     return color.a === 0 || (color.r === 0 && color.g === 0 && color.b === 0 && color.a === undefined);
+  }
+
+  static toRgbaString(color: FigmaColor): string {
+    const r = Math.round(color.r * 255);
+    const g = Math.round(color.g * 255);
+    const b = Math.round(color.b * 255);
+    const a = color.a !== undefined ? color.a : 1;
+    
+    return a === 1 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${a})`;
+  }
+
+  static clearCache(): void {
+    this.cssVariableCache.clear();
   }
 }

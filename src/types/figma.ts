@@ -262,3 +262,57 @@ export interface QualityReport {
   performance: number;
   recommendations: string[];
 }
+
+export interface FigmaColor {
+  r: number;
+  g: number;
+  b: number;
+  a?: number;
+}
+
+export interface FigmaFontName {
+  family: string;
+  style: string;
+}
+
+export interface FigmaFrameNode extends Omit<FigmaNode, 'type'> {
+  type: 'FRAME';
+  children?: FigmaNode[];
+  layoutMode?: 'NONE' | 'HORIZONTAL' | 'VERTICAL';
+  itemSpacing?: number;
+  paddingLeft?: number;
+  paddingRight?: number;
+  paddingTop?: number;
+  paddingBottom?: number;
+  primaryAxisAlignItems?: string;
+  counterAxisAlignItems?: string;
+  effects?: any[];
+  width: number;
+  height: number;
+  fills?: any[];
+  cornerRadius?: number | number[];
+  opacity?: number;
+}
+
+export interface FigmaTextNode extends Omit<FigmaNode, 'type'> {
+  type: 'TEXT';
+  characters: string;
+  fontSize: number;
+  fontName: FigmaFontName;
+  fills?: any[];
+  textAlignHorizontal?: 'LEFT' | 'CENTER' | 'RIGHT' | 'JUSTIFIED';
+  textAlignVertical?: 'TOP' | 'CENTER' | 'BOTTOM';
+  letterSpacing?: number;
+  lineHeight?: number | { value: number; unit: 'PIXELS' | 'PERCENT' };
+  textCase?: 'ORIGINAL' | 'UPPER' | 'LOWER' | 'TITLE';
+  textDecoration?: 'NONE' | 'UNDERLINE' | 'STRIKETHROUGH';
+  width: number;
+  height: number;
+}
+
+export interface ConversionOptions {
+  includeHiddenElements?: boolean;
+  preserveAbsolutePositioning?: boolean;
+  maxDepth?: number;
+  customElementHandlers?: Map<string, (element: HTMLElement) => FigmaNode | null>;
+}
