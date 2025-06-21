@@ -130,7 +130,7 @@ export interface FigmaFrameNode extends Omit<FigmaNode, 'type' | 'cornerRadius'>
   width: number;
   height: number;
   fills?: any[];
-  cornerRadius?: number | number[];
+  cornerRadius?: number;
   opacity?: number;
 }
 

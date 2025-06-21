@@ -1,7 +1,8 @@
+
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import type { FigmaApiResponse, GeneratedComponent, CodeGenerationOptions, CustomCodeInputs } from "@/types/figma";
+import type { FigmaApiResponse, GeneratedComponent, CodeGenerationOptions, CustomCodeInputs, TypeStyle } from "@/types/figma";
 import { EnhancedCodeGenerationPanel } from "../enhanced-code-generation-panel";
 import { FileInput } from "./FileInput";
 import { DebugPanel } from "./DebugPanel";
@@ -121,6 +122,18 @@ export function EnhancedFigmaGenerator({
 
   // Mock Figma data for development/testing
   const createMockFigmaData = useCallback((): FigmaApiResponse => {
+    const mockTypeStyle: TypeStyle = {
+      fontSize: 16,
+      fontFamily: "Inter",
+      lineHeightPx: 24,
+      lineHeightUnit: "PIXELS",
+      letterSpacing: 0,
+      fills: [{
+        type: "SOLID",
+        color: { r: 0, g: 0, b: 0, a: 1 }
+      }]
+    };
+
     return {
       name: "Sample Design System",
       version: "1.0.0",
@@ -142,10 +155,7 @@ export function EnhancedFigmaGenerator({
                 name: "Button Text",
                 type: "TEXT",
                 characters: "Click me",
-                style: {
-                  fontSize: 16,
-                  fontFamily: "Inter",
-                },
+                style: mockTypeStyle,
               },
             ],
           },

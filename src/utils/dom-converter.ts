@@ -1,11 +1,20 @@
-import { FigmaNode, FigmaFrameNode, FigmaColor, Color, Paint } from '@/types/figma';
+
+import { FigmaNode, FigmaFrameNode, FigmaColor, Color, Paint, ConversionOptions } from '@/types/figma';
 import { ColorParser } from './color-parser';
 import { TextNodeConverter } from './converters/TextNodeConverter';
 import { LayoutNodeConverter } from './converters/LayoutNodeConverter';
 
 export class DOMConverter {
   private processedElements: WeakSet<HTMLElement> = new WeakSet();
-  private options: any = {};
+  private options: ConversionOptions = {};
+
+  constructor(options: ConversionOptions = {}) {
+    this.options = options;
+  }
+
+  convertElement(element: HTMLElement): FigmaNode[] {
+    return this.convertElementToFigma(element);
+  }
 
   convertElementToFigma(element: HTMLElement): FigmaNode[] {
     if (this.processedElements.has(element)) {
@@ -38,12 +47,17 @@ export class DOMConverter {
       }
     });
 
-    // Add children to the first frame node
+    // Add children to the first frame node and convert to FigmaNode type
     if (frameNodes.length > 0) {
-      frameNodes[0].children = children;
+      const convertedNodes: FigmaNode[] = frameNodes.map(frameNode => ({
+        ...frameNode,
+        cornerRadius: Array.isArray(frameNode.cornerRadius) ? frameNode.cornerRadius[0] : frameNode.cornerRadius,
+        children: children
+      }));
+      return convertedNodes;
     }
 
-    return frameNodes;
+    return [];
   }
 
   private convertColorToFigmaColor(color: FigmaColor): Color {
@@ -62,8 +76,8 @@ export class DOMConverter {
     }));
   }
 
-  setOptions(options: any): void {
-    this.options = options;
+  setOptions(options: ConversionOptions): void {
+    this.options = { ...this.options, ...options };
   }
 
   clearProcessedElements(): void {

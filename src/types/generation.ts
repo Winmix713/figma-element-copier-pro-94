@@ -21,13 +21,14 @@ export interface ComponentMetadata {
   estimatedAccuracy: number;
   generationTime: number;
   dependencies: string[];
+  aiOptimization?: AIOptimizationResult;
 }
 
 export interface AccessibilityReport {
   score: number;
   issues: AccessibilityIssue[];
   suggestions: string[];
-  wcagCompliance: 'A' | 'AA' | 'AAA';
+  wcagCompliance: 'A' | 'AA' | 'AAA' | 'Non-compliant';
 }
 
 export interface AccessibilityIssue {
@@ -78,4 +79,13 @@ export interface CustomCodeInputs {
   storybook?: string;
   hooks?: string;
   utils?: string;
+}
+
+export interface ConversionOptions {
+  includeHidden?: boolean;
+  preserveIds?: boolean;
+  optimizeLayout?: boolean;
+  generateResponsive?: boolean;
+  includeInteractions?: boolean;
+  exportAssets?: boolean;
 }

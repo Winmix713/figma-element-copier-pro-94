@@ -1,133 +1,93 @@
 
-import { FigmaFrameNode, FigmaNode, ConversionOptions } from '@/types/figma';
-import { ColorParser } from '../color-parser';
-import { StyleParser } from './StyleParser';
+import { FigmaFrameNode, ConversionOptions } from '@/types/figma';
 
 export class LayoutNodeConverter {
-  private processedElements: WeakSet<HTMLElement>;
   private options: ConversionOptions;
+  private processedElements: WeakSet<HTMLElement>;
 
-  constructor(options: ConversionOptions = {}, processedElements: WeakSet<HTMLElement>) {
+  constructor(options: ConversionOptions = {}, processedElements: WeakSet<HTMLElement> = new WeakSet()) {
     this.options = options;
     this.processedElements = processedElements;
   }
 
   convert(element: HTMLElement, styles: CSSStyleDeclaration, rect: DOMRect, depth: number): FigmaFrameNode[] {
-    const backgroundColor = ColorParser.parse(styles.backgroundColor);
-    const cornerRadius = StyleParser.parseCornerRadius(styles.borderRadius);
-    
     const frameNode: FigmaFrameNode = {
-      type: 'FRAME',
       id: this.generateId(),
-      name: this.generateNodeName(element, 'Frame'),
-      width: Math.round(rect.width),
-      height: Math.round(rect.height),
-      fills: ColorParser.isTransparent(backgroundColor) ? [] : [{ type: 'SOLID', color: backgroundColor }],
-      cornerRadius,
-      children: [],
+      name: this.getElementName(element),
+      type: 'FRAME',
+      width: rect.width,
+      height: rect.height,
+      absoluteBoundingBox: {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height
+      },
       layoutMode: this.getLayoutMode(styles),
-      opacity: StyleParser.parseOpacity(styles.opacity),
+      fills: this.extractFills(styles),
+      cornerRadius: this.extractCornerRadius(styles),
+      opacity: this.extractOpacity(styles),
+      children: []
     };
-
-    // Add layout properties
-    this.addLayoutProperties(frameNode, styles);
-
-    // Add effects (shadows, etc.)
-    const effects = StyleParser.parseEffects(styles);
-    if (effects.length > 0) {
-      frameNode.effects = effects;
-    }
 
     return [frameNode];
   }
 
-  private addLayoutProperties(frameNode: FigmaFrameNode, styles: CSSStyleDeclaration): void {
-    if (frameNode.layoutMode && frameNode.layoutMode !== 'NONE') {
-      // Add Auto Layout properties
-      const gap = this.parseGap(styles.gap);
-      if (gap > 0) {
-        frameNode.itemSpacing = gap;
-      }
+  private generateId(): string {
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
 
-      // Add padding
-      frameNode.paddingLeft = this.parsePadding(styles.paddingLeft);
-      frameNode.paddingRight = this.parsePadding(styles.paddingRight);
-      frameNode.paddingTop = this.parsePadding(styles.paddingTop);
-      frameNode.paddingBottom = this.parsePadding(styles.paddingBottom);
-
-      // Add alignment
-      frameNode.primaryAxisAlignItems = this.getPrimaryAxisAlignment(styles);
-      frameNode.counterAxisAlignItems = this.getCounterAxisAlignment(styles);
-    }
+  private getElementName(element: HTMLElement): string {
+    return element.tagName.toLowerCase() + (element.className ? `-${element.className.split(' ')[0]}` : '');
   }
 
   private getLayoutMode(styles: CSSStyleDeclaration): 'NONE' | 'HORIZONTAL' | 'VERTICAL' {
     const display = styles.display;
     const flexDirection = styles.flexDirection;
-    
+
     if (display === 'flex') {
       return flexDirection === 'column' ? 'VERTICAL' : 'HORIZONTAL';
     }
-    
-    if (display === 'grid') {
-      // Simple grid detection - could be enhanced
-      const gridTemplateColumns = styles.gridTemplateColumns;
-      const gridTemplateRows = styles.gridTemplateRows;
-      
-      if (gridTemplateRows && gridTemplateRows !== 'none') {
-        return 'VERTICAL';
-      }
-      if (gridTemplateColumns && gridTemplateColumns !== 'none') {
-        return 'HORIZONTAL';
-      }
-    }
-    
+
     return 'NONE';
   }
 
-  private parseGap(gap: string): number {
-    if (!gap || gap === 'normal') return 0;
-    return parseFloat(gap) || 0;
-  }
-
-  private parsePadding(padding: string): number {
-    if (!padding) return 0;
-    return parseFloat(padding) || 0;
-  }
-
-  private getPrimaryAxisAlignment(styles: CSSStyleDeclaration): string {
-    const justifyContent = styles.justifyContent;
-    switch (justifyContent) {
-      case 'center': return 'CENTER';
-      case 'flex-end': return 'MAX';
-      case 'space-between': return 'SPACE_BETWEEN';
-      case 'space-around': return 'SPACE_AROUND';
-      case 'space-evenly': return 'SPACE_EVENLY';
-      default: return 'MIN';
+  private extractFills(styles: CSSStyleDeclaration): any[] {
+    const backgroundColor = styles.backgroundColor;
+    if (backgroundColor && backgroundColor !== 'rgba(0, 0, 0, 0)') {
+      return [{
+        type: 'SOLID',
+        color: this.parseColor(backgroundColor),
+        visible: true
+      }];
     }
+    return [];
   }
 
-  private getCounterAxisAlignment(styles: CSSStyleDeclaration): string {
-    const alignItems = styles.alignItems;
-    switch (alignItems) {
-      case 'center': return 'CENTER';
-      case 'flex-end': return 'MAX';
-      case 'stretch': return 'STRETCH';
-      default: return 'MIN';
+  private extractCornerRadius(styles: CSSStyleDeclaration): number {
+    const borderRadius = styles.borderRadius;
+    if (borderRadius && borderRadius !== '0px') {
+      return parseInt(borderRadius, 10) || 0;
     }
+    return 0;
   }
 
-  private generateNodeName(element: HTMLElement, fallback: string): string {
-    const className = element.className.toString().trim();
-    const id = element.id;
-    const tagName = element.tagName.toLowerCase();
-    
-    if (id) return `${tagName}#${id}`;
-    if (className) return `${tagName}.${className.split(' ')[0]}`;
-    return `${fallback} (${tagName})`;
+  private extractOpacity(styles: CSSStyleDeclaration): number {
+    const opacity = styles.opacity;
+    return opacity ? parseFloat(opacity) : 1;
   }
 
-  private generateId(): string {
-    return Math.random().toString(36).substr(2, 9);
+  private parseColor(colorString: string): { r: number; g: number; b: number; a: number } {
+    // Simple color parser - you might want to use a more robust solution
+    const rgbaMatch = colorString.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+    if (rgbaMatch) {
+      return {
+        r: parseInt(rgbaMatch[1], 10) / 255,
+        g: parseInt(rgbaMatch[2], 10) / 255,
+        b: parseInt(rgbaMatch[3], 10) / 255,
+        a: rgbaMatch[4] ? parseFloat(rgbaMatch[4]) : 1
+      };
+    }
+    return { r: 0, g: 0, b: 0, a: 1 };
   }
 }
