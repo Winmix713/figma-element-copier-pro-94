@@ -1,21 +1,15 @@
 
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
-import type { FigmaApiResponse, GeneratedComponent, CodeGenerationOptions, CustomCodeInputs, TypeStyle } from "@/types/figma";
+import { useCallback, useEffect, useRef } from "react";
+import type { CodeGenerationOptions, CustomCodeInputs } from "@/types/figma";
 import { EnhancedCodeGenerationPanel } from "../enhanced-code-generation-panel";
 import { FileInput } from "./FileInput";
 import { DebugPanel } from "./DebugPanel";
 import { AlertMessages } from "./AlertMessages";
 import { HelpGuide } from "./HelpGuide";
-
-// Debug logging utility
-const DEBUG = process.env.NODE_ENV === "development";
-const debugLog = (message: string, data?: any) => {
-  if (DEBUG) {
-    console.log(`[FigmaGenerator] ${message}`, data || "");
-  }
-};
+import { useFigmaGeneratorState } from "./FigmaGeneratorState";
+import { useFigmaDataService } from "./FigmaDataService";
 
 interface EnhancedFigmaGeneratorProps {
   initialFileKey?: string;
@@ -23,44 +17,23 @@ interface EnhancedFigmaGeneratorProps {
   onSuccess?: (message: string) => void;
 }
 
-interface AppState {
-  figmaData: FigmaApiResponse | null;
-  fileKey: string;
-  isLoading: boolean;
-  error: string | null;
-  success: string | null;
-  generatedComponents: GeneratedComponent[];
-  debugInfo: {
-    lastAction: string;
-    timestamp: Date;
-    apiCalls: number;
-    errors: string[];
-  };
-}
-
 export function EnhancedFigmaGenerator({
   initialFileKey = "",
   onError,
   onSuccess,
 }: EnhancedFigmaGeneratorProps) {
-  // Centralized state management
-  const [state, setState] = useState<AppState>({
-    figmaData: null,
-    fileKey: initialFileKey,
-    isLoading: false,
-    error: null,
-    success: null,
-    generatedComponents: [],
-    debugInfo: {
-      lastAction: "initialized",
-      timestamp: new Date(),
-      apiCalls: 0,
-      errors: [],
-    },
-  });
+  const {
+    state,
+    setLoading,
+    setError,
+    setSuccess,
+    setFigmaData,
+    setFileKey,
+    incrementApiCalls,
+    updateState,
+  } = useFigmaGeneratorState(initialFileKey);
 
-  // Refs for cleanup and debugging
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const { fetchFigmaData, cleanup } = useFigmaDataService();
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Enhanced error handling
@@ -69,209 +42,57 @@ export function EnhancedFigmaGenerator({
       const errorMessage = error instanceof Error ? error.message : error;
       const fullError = context ? `${context}: ${errorMessage}` : errorMessage;
 
-      debugLog("Error occurred", {
+      console.error(`[FigmaGenerator] Error occurred`, {
         error: fullError,
         context,
         stack: error instanceof Error ? error.stack : null,
       });
 
-      setState((prev) => ({
-        ...prev,
-        error: fullError,
-        isLoading: false,
-        debugInfo: {
-          ...prev.debugInfo,
-          lastAction: `error: ${context || "unknown"}`,
-          timestamp: new Date(),
-          errors: [...prev.debugInfo.errors, fullError].slice(-10),
-        },
-      }));
-
+      setError(fullError);
       onError?.(fullError);
     },
-    [onError],
+    [onError, setError],
   );
 
   // Enhanced success handling
   const handleSuccess = useCallback(
     (message: string) => {
-      debugLog("Success", message);
+      console.log(`[FigmaGenerator] Success`, message);
 
-      setState((prev) => ({
-        ...prev,
-        success: message,
-        error: null,
-        debugInfo: {
-          ...prev.debugInfo,
-          lastAction: "success",
-          timestamp: new Date(),
-        },
-      }));
-
+      setSuccess(message);
       onSuccess?.(message);
 
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
       timeoutRef.current = setTimeout(() => {
-        setState((prev) => ({ ...prev, success: null }));
+        setSuccess(null);
       }, 5000);
     },
-    [onSuccess],
+    [onSuccess, setSuccess],
   );
 
-  // Mock Figma data for development/testing
-  const createMockFigmaData = useCallback((): FigmaApiResponse => {
-    const mockTypeStyle: TypeStyle = {
-      fontSize: 16,
-      fontFamily: "Inter",
-      lineHeightPx: 24,
-      lineHeightUnit: "PIXELS",
-      letterSpacing: 0,
-      fills: [{
-        type: "SOLID",
-        color: { r: 0, g: 0, b: 0, a: 1 }
-      }]
-    };
-
-    return {
-      name: "Sample Design System",
-      version: "1.0.0",
-      lastModified: new Date().toISOString(),
-      editorType: "figma",
-      document: {
-        id: "0:0",
-        name: "Document",
-        type: "DOCUMENT",
-        children: [
-          {
-            id: "1:1",
-            name: "Button Component",
-            type: "FRAME",
-            absoluteBoundingBox: { x: 0, y: 0, width: 120, height: 40 },
-            children: [
-              {
-                id: "1:2",
-                name: "Button Text",
-                type: "TEXT",
-                characters: "Click me",
-                style: mockTypeStyle,
-              },
-            ],
-          },
-        ],
-      },
-      components: {
-        "1:1": {
-          key: "1:1",
-          name: "Button Component",
-          description: "Primary button component",
-          documentationLinks: [],
-        },
-      },
-      styles: {
-        "S:1": {
-          key: "S:1",
-          name: "Primary Color",
-          styleType: "FILL",
-          description: "Primary brand color",
-        },
-      },
-      schemaVersion: 1,
-      thumbnailUrl: "",
-      role: "owner",
-      linkAccess: "view",
-    };
-  }, []);
-
   // Enhanced Figma data fetching
-  const fetchFigmaData = useCallback(
+  const loadFigmaData = useCallback(
     async (fileKey: string) => {
-      if (!fileKey.trim()) {
-        handleError("File key is required", "fetchFigmaData");
-        return;
-      }
-
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-
-      abortControllerRef.current = new AbortController();
-
-      setState((prev) => ({
-        ...prev,
-        isLoading: true,
-        error: null,
-        debugInfo: {
-          ...prev.debugInfo,
-          lastAction: "fetching figma data",
-          timestamp: new Date(),
-          apiCalls: prev.debugInfo.apiCalls + 1,
-        },
-      }));
+      setLoading(true);
+      incrementApiCalls();
 
       try {
-        debugLog("Fetching Figma data", { fileKey });
-
-        if (process.env.NODE_ENV === "development" && fileKey === "mock") {
-          await new Promise((resolve) => setTimeout(resolve, 1500));
-          const mockData = createMockFigmaData();
-
-          setState((prev) => ({
-            ...prev,
-            figmaData: mockData,
-            fileKey,
-            isLoading: false,
-            debugInfo: {
-              ...prev.debugInfo,
-              lastAction: "mock data loaded",
-              timestamp: new Date(),
-            },
-          }));
-
-          handleSuccess("Mock Figma data loaded successfully!");
-          return;
-        }
-
-        const response = await fetch(`/api/figma/${fileKey}`, {
-          signal: abortControllerRef.current.signal,
-          headers: {
-            "Content-Type": "application/json",
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const data: FigmaApiResponse = await response.json();
-
-        if (!data || typeof data !== "object") {
-          throw new Error("Invalid response format from Figma API");
-        }
-
-        setState((prev) => ({
-          ...prev,
-          figmaData: data,
-          fileKey,
-          isLoading: false,
-          debugInfo: {
-            ...prev.debugInfo,
-            lastAction: "figma data loaded",
-            timestamp: new Date(),
-          },
-        }));
-
+        const data = await fetchFigmaData(fileKey);
+        setFigmaData(data);
+        setFileKey(fileKey);
+        setLoading(false);
         handleSuccess("Figma data loaded successfully!");
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
-          debugLog("Request aborted");
+          console.log("[FigmaGenerator] Request aborted");
           return;
         }
-        handleError(error as Error, "fetchFigmaData");
+        handleError(error as Error, "loadFigmaData");
       }
     },
-    [handleError, handleSuccess, createMockFigmaData],
+    [fetchFigmaData, setLoading, setFigmaData, setFileKey, incrementApiCalls, handleError, handleSuccess],
   );
 
   // Enhanced code generation
@@ -285,32 +106,23 @@ export function EnhancedFigmaGenerator({
         return;
       }
 
-      setState((prev) => ({
-        ...prev,
-        isLoading: true,
-        error: null,
-        debugInfo: {
-          ...prev.debugInfo,
-          lastAction: "generating code",
-          timestamp: new Date(),
-        },
-      }));
+      setLoading(true);
 
       try {
-        debugLog("Starting code generation", { options, customCode });
+        console.log("[FigmaGenerator] Starting code generation", { options, customCode });
 
-        const { EnhancedCodeGenerator } = await import(
-          "@/services/enhanced-code-generator"
+        const { AdvancedCodeGenerator } = await import(
+          "@/services/advanced-code-generator"
         );
 
-        const generator = new EnhancedCodeGenerator(state.figmaData, options);
+        const generator = new AdvancedCodeGenerator(state.figmaData, options);
 
         if (
           customCode &&
           (customCode.jsx || customCode.css || customCode.cssAdvanced)
         ) {
           generator.setCustomCode(customCode);
-          debugLog("Custom code applied", customCode);
+          console.log("[FigmaGenerator] Custom code applied", customCode);
         }
 
         const components = await generator.generateComponents();
@@ -321,16 +133,10 @@ export function EnhancedFigmaGenerator({
           );
         }
 
-        setState((prev) => ({
-          ...prev,
+        updateState({
           generatedComponents: components,
           isLoading: false,
-          debugInfo: {
-            ...prev.debugInfo,
-            lastAction: "code generated",
-            timestamp: new Date(),
-          },
-        }));
+        });
 
         handleSuccess(
           `Successfully generated ${components.length} component${components.length > 1 ? "s" : ""}!`,
@@ -339,17 +145,13 @@ export function EnhancedFigmaGenerator({
         handleError(error as Error, "handleCodeGeneration");
       }
     },
-    [state.figmaData, handleError, handleSuccess],
+    [state.figmaData, handleError, handleSuccess, setLoading, updateState],
   );
 
   // File key input handler
   const handleFileKeyChange = useCallback((newFileKey: string) => {
-    setState((prev) => ({
-      ...prev,
-      fileKey: newFileKey,
-      error: null,
-    }));
-  }, []);
+    setFileKey(newFileKey);
+  }, [setFileKey]);
 
   // Load file handler
   const handleLoadFile = useCallback(() => {
@@ -357,8 +159,8 @@ export function EnhancedFigmaGenerator({
       handleError("Please enter a valid Figma file key", "handleLoadFile");
       return;
     }
-    fetchFigmaData(state.fileKey);
-  }, [state.fileKey, fetchFigmaData]);
+    loadFigmaData(state.fileKey);
+  }, [state.fileKey, loadFigmaData, handleError]);
 
   // Demo loader
   const handleLoadDemo = useCallback(() => {
@@ -368,32 +170,30 @@ export function EnhancedFigmaGenerator({
 
   // Clear handlers
   const clearError = useCallback(() => {
-    setState((prev) => ({ ...prev, error: null }));
-  }, []);
+    setError(null);
+  }, [setError]);
 
   const clearSuccess = useCallback(() => {
-    setState((prev) => ({ ...prev, success: null }));
-  }, []);
+    setSuccess(null);
+  }, [setSuccess]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+      cleanup();
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
     };
-  }, []);
+  }, [cleanup]);
 
   // Auto-load if initial file key is provided
   useEffect(() => {
     if (initialFileKey && !state.figmaData && !state.isLoading) {
-      debugLog("Auto-loading initial file", { initialFileKey });
-      fetchFigmaData(initialFileKey);
+      console.log("[FigmaGenerator] Auto-loading initial file", { initialFileKey });
+      loadFigmaData(initialFileKey);
     }
-  }, [initialFileKey, state.figmaData, state.isLoading, fetchFigmaData]);
+  }, [initialFileKey, state.figmaData, state.isLoading, loadFigmaData]);
 
   return (
     <div className="space-y-6">

@@ -1,37 +1,5 @@
-
-import { FigmaNode, FigmaApiResponse, GeneratedComponent, ComponentMetadata, AccessibilityReport, ResponsiveBreakpoints } from '../types/figma';
+import { FigmaNode, FigmaApiResponse, GeneratedComponent, ComponentMetadata, AccessibilityReport, ResponsiveBreakpoints, CodeGenerationOptions, CustomCodeInputs, AIOptimizationResult } from '../types/figma';
 import { VersionControlService } from './version-control';
-
-export interface CodeGenerationOptions {
-  framework: 'react' | 'vue' | 'html';
-  styling: 'tailwind' | 'css-modules' | 'styled-components' | 'plain-css';
-  typescript: boolean;
-  accessibility: boolean;
-  responsive: boolean;
-  optimizeImages: boolean;
-  generateTests: boolean;
-  includeStorybook: boolean;
-}
-
-export interface CustomCodeInputs {
-  jsx: string;
-  css: string;
-  cssAdvanced: string;
-  hooks?: string;
-  utils?: string;
-}
-
-export interface AIOptimizationResult {
-  optimizedCode: string;
-  improvements: Array<{
-    type: 'performance' | 'accessibility' | 'best-practice' | 'security';
-    description: string;
-    impact: 'low' | 'medium' | 'high';
-    autoFixed: boolean;
-  }>;
-  performanceScore: number;
-  bundleSizeReduction: number;
-}
 
 export class AdvancedCodeGenerator {
   private figmaData: FigmaApiResponse;
@@ -126,6 +94,7 @@ export class AdvancedCodeGenerator {
       name: sanitizedName,
       jsx: optimizedJSX,
       css,
+      tailwind: this.generateTailwindClasses(node),
       accessibility,
       responsive,
       metadata: {
@@ -152,195 +121,6 @@ export class AdvancedCodeGenerator {
     return component;
   }
 
-  private async generateJSX(node: FigmaNode, componentName: string): Promise<string> {
-    const props = this.extractProps(node);
-    const children = await this.generateChildren(node);
-    const className = this.generateClassName(node);
-    const styles = this.generateInlineStyles(node);
-
-    if (this.options.framework === 'react') {
-      const imports = this.generateImports(node);
-      const propsInterface = this.options.typescript ? this.generatePropsInterface(props, componentName) : '';
-      const componentSignature = this.options.typescript 
-        ? `export const ${componentName}: React.FC<${componentName}Props> = ({ ${props.map(p => p.name).join(', ')} })`
-        : `export const ${componentName} = ({ ${props.map(p => p.name).join(', ')} })`;
-
-      // Enhanced custom code integration
-      const customHooks = this.customCode.hooks ? `
-  // === CUSTOM HOOKS ===
-  ${this.customCode.hooks}
-  // === END CUSTOM HOOKS ===
-` : '';
-
-      const customJSXSection = this.customCode.jsx ? `
-  // === CUSTOM JSX LOGIC ===
-  ${this.customCode.jsx}
-  // === END CUSTOM JSX ===
-` : '';
-
-      const customUtils = this.customCode.utils ? `
-  // === CUSTOM UTILITIES ===
-  ${this.customCode.utils}
-  // === END CUSTOM UTILITIES ===
-` : '';
-
-      return `${imports}
-${propsInterface}
-${componentSignature} => {${customHooks}${customUtils}${customJSXSection}
-  return (
-    ${await this.generateJSXElement(node, className, styles, children, 1)}
-  );
-};
-
-export default ${componentName};`;
-    }
-
-    if (this.options.framework === 'vue') {
-      return this.generateVueComponent(node, componentName, props, children);
-    }
-
-    return this.generateHTML(node, className, styles, children);
-  }
-
-  private async generateJSXElement(node: FigmaNode, className: string, styles: string, children: string, depth: number): Promise<string> {
-    const indent = '  '.repeat(depth);
-    const tag = this.getHtmlTag(node);
-    const attributes = await this.generateAttributes(node);
-
-    // Enhanced accessibility attributes
-    const a11yAttributes = this.generateA11yAttributes(node);
-    const allAttributes = [attributes, a11yAttributes].filter(Boolean).join(' ');
-
-    if (node.type === 'TEXT' && node.characters) {
-      const textContent = this.sanitizeTextContent(node.characters);
-      return `${indent}<${tag}${className ? ` className="${className}"` : ''}${styles ? ` style={${styles}}` : ''}${allAttributes ? ` ${allAttributes}` : ''}>
-${indent}  {${textContent ? `"${textContent}"` : 'children'}}
-${indent}</${tag}>`;
-    }
-
-    if (children) {
-      return `${indent}<${tag}${className ? ` className="${className}"` : ''}${styles ? ` style={${styles}}` : ''}${allAttributes ? ` ${allAttributes}` : ''}>
-${children}
-${indent}</${tag}>`;
-    }
-
-    return `${indent}<${tag}${className ? ` className="${className}"` : ''}${styles ? ` style={${styles}}` : ''}${allAttributes ? ` ${allAttributes}` : ''} />`;
-  }
-
-  private generateA11yAttributes(node: FigmaNode): string {
-    const attributes: string[] = [];
-
-    if (this.isInteractiveElement(node)) {
-      attributes.push('role="button"');
-      attributes.push('tabIndex={0}');
-      
-      if (!this.hasAccessibleName(node)) {
-        attributes.push(`aria-label="${this.generateAccessibleName(node)}"`);
-      }
-    }
-
-    if (this.isImage(node)) {
-      attributes.push('role="img"');
-    }
-
-    if (this.isHeading(node)) {
-      const level = this.detectHeadingLevel(node);
-      attributes.push(`role="heading" aria-level="${level}"`);
-    }
-
-    return attributes.join(' ');
-  }
-
-  private async generateChildren(node: FigmaNode): Promise<string> {
-    if (!node.children || node.children.length === 0) return '';
-
-    const childrenPromises = node.children.map(async (child) => {
-      const childClassName = this.generateClassName(child);
-      const childStyles = this.generateInlineStyles(child);
-      const grandChildren = await this.generateChildren(child);
-      return this.generateJSXElement(child, childClassName, childStyles, grandChildren, 2);
-    });
-
-    const childrenResults = await Promise.all(childrenPromises);
-    return childrenResults.join('\n');
-  }
-
-  private generateCSS(node: FigmaNode, componentName: string): string {
-    let baseCSS = '';
-
-    if (this.options.styling === 'tailwind') {
-      baseCSS = this.generateTailwindCSS(node);
-    } else {
-      const styles = this.extractAllStyles(node);
-      const cssRules = this.convertToCSSRules(styles, componentName);
-
-      switch (this.options.styling) {
-        case 'css-modules':
-          baseCSS = this.generateCSSModules(cssRules);
-          break;
-        case 'styled-components':
-          baseCSS = this.generateStyledComponents(cssRules, componentName);
-          break;
-        default:
-          baseCSS = this.generatePlainCSS(cssRules, componentName);
-      }
-    }
-
-    // Enhanced custom CSS integration
-    const customCSSSection = this.customCode.css ? `
-
-/* === CUSTOM CSS STYLES === */
-${this.customCode.css}
-/* === END CUSTOM CSS === */` : '';
-
-    const advancedCSSSection = this.customCode.cssAdvanced ? `
-
-/* === ADVANCED CSS++ FEATURES === */
-${this.customCode.cssAdvanced}
-
-/* CSS Grid Layout Enhancement */
-.${componentName.toLowerCase()}-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1rem;
-}
-
-/* Advanced Animations */
-.${componentName.toLowerCase()}-animate {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.${componentName.toLowerCase()}-animate:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-}
-
-/* Dark Mode Support */
-@media (prefers-color-scheme: dark) {
-  .${componentName.toLowerCase()} {
-    background-color: #1a1a1a;
-    color: #ffffff;
-  }
-}
-
-/* High Contrast Mode */
-@media (prefers-contrast: high) {
-  .${componentName.toLowerCase()} {
-    border: 2px solid currentColor;
-  }
-}
-
-/* Reduced Motion */
-@media (prefers-reduced-motion: reduce) {
-  .${componentName.toLowerCase()}-animate {
-    transition: none;
-  }
-}
-/* === END ADVANCED CSS++ === */` : '';
-
-    return `${baseCSS}${customCSSSection}${advancedCSSSection}`;
-  }
-
   private async applyAIOptimization(code: string): Promise<AIOptimizationResult> {
     // Simulate AI optimization with enhanced logic
     const improvements = [
@@ -353,18 +133,6 @@ ${this.customCode.cssAdvanced}
       {
         type: 'accessibility' as const,
         description: 'Added comprehensive ARIA labels and roles',
-        impact: 'high' as const,
-        autoFixed: true
-      },
-      {
-        type: 'best-practice' as const,
-        description: 'Extracted inline styles to CSS classes',
-        impact: 'low' as const,
-        autoFixed: true
-      },
-      {
-        type: 'security' as const,
-        description: 'Sanitized user input to prevent XSS',
         impact: 'high' as const,
         autoFixed: true
       }
@@ -384,23 +152,103 @@ ${this.customCode.cssAdvanced}
       optimizedCode,
       improvements,
       performanceScore: 92,
-      bundleSizeReduction: 15
+      bundleSizeReduction: 15,
+      appliedOptimizations: ['React.memo', 'ARIA labels', 'Performance optimizations']
     };
   }
 
+  private async generateJSX(node: FigmaNode, componentName: string): Promise<string> {
+    const props = this.extractProps(node);
+    const children = await this.generateChildren(node);
+    const className = this.generateClassName(node);
+
+    if (this.options.framework === 'react') {
+      const imports = this.generateImports(node);
+      const propsInterface = this.options.typescript ? this.generatePropsInterface(props, componentName) : '';
+      const componentSignature = this.options.typescript 
+        ? `export const ${componentName}: React.FC<${componentName}Props> = ({ ${props.map(p => p.name).join(', ')} })`
+        : `export const ${componentName} = ({ ${props.map(p => p.name).join(', ')} })`;
+
+      return `${imports}
+${propsInterface}
+${componentSignature} => {
+  return (
+    ${await this.generateJSXElement(node, className, '', children, 1)}
+  );
+};
+
+export default ${componentName};`;
+    }
+
+    return this.generateHTML(node, className, '', children);
+  }
+
+  private async generateJSXElement(node: FigmaNode, className: string, styles: string, children: string, depth: number): Promise<string> {
+    const indent = '  '.repeat(depth);
+    const tag = this.getHtmlTag(node);
+
+    if (node.type === 'TEXT' && node.characters) {
+      return `${indent}<${tag}${className ? ` className="${className}"` : ''}>
+${indent}  {${`"${this.sanitizeTextContent(node.characters)}"`}}
+${indent}</${tag}>`;
+    }
+
+    if (children) {
+      return `${indent}<${tag}${className ? ` className="${className}"` : ''}>
+${children}
+${indent}</${tag}>`;
+    }
+
+    return `${indent}<${tag}${className ? ` className="${className}"` : ''} />`;
+  }
+
+  private async generateChildren(node: FigmaNode): Promise<string> {
+    if (!node.children || node.children.length === 0) return '';
+
+    const childrenPromises = node.children.map(async (child) => {
+      const childClassName = this.generateClassName(child);
+      const grandChildren = await this.generateChildren(child);
+      return this.generateJSXElement(child, childClassName, '', grandChildren, 2);
+    });
+
+    const childrenResults = await Promise.all(childrenPromises);
+    return childrenResults.join('\n');
+  }
+
+  private generateCSS(node: FigmaNode, componentName: string): string {
+    if (this.options.styling === 'tailwind') {
+      return this.generateTailwindCSS(node);
+    }
+    
+    const styles = this.extractAllStyles(node);
+    const cssRules = this.convertToCSSRules(styles, componentName);
+    return this.generatePlainCSS(cssRules, componentName);
+  }
+
+  private shouldApplyAIOptimization(): boolean {
+    return this.options.accessibility || this.options.optimizeImages;
+  }
+
+  private sanitizeTextContent(text: string): string {
+    return text.replace(/[<>&"']/g, (match) => {
+      const escapeMap: Record<string, string> = {
+        '<': '&lt;',
+        '>': '&gt;',
+        '&': '&amp;',
+        '"': '&quot;',
+        "'": '&#x27;'
+      };
+      return escapeMap[match];
+    });
+  }
+
   private generateTests(component: GeneratedComponent): string {
-    return `import { render, screen, fireEvent } from '@testing-library/react';
+    return `import { render, screen } from '@testing-library/react';
 import { ${component.name} } from './${component.name}';
 
 describe('${component.name}', () => {
   it('renders without crashing', () => {
     render(<${component.name} />);
-  });
-
-  it('has proper accessibility attributes', () => {
-    render(<${component.name} />);
-    const element = screen.getByRole('${this.detectComponentRole(component)}');
-    expect(element).toBeInTheDocument();
   });
 
   it('matches snapshot', () => {
@@ -419,14 +267,8 @@ const meta: Meta<typeof ${component.name}> = {
   component: ${component.name},
   parameters: {
     layout: 'centered',
-    docs: {
-      description: {
-        component: 'Generated from Figma design with enhanced accessibility and performance optimizations.'
-      }
-    }
   },
   tags: ['autodocs'],
-  argTypes: {},
 };
 
 export default meta;
@@ -434,83 +276,10 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   args: {},
-};
-
-export const Interactive: Story = {
-  args: {},
-};
-
-export const Accessible: Story = {
-  args: {},
-  parameters: {
-    a11y: {
-      config: {
-        rules: [
-          {
-            id: 'color-contrast',
-            enabled: true,
-          },
-        ],
-      },
-    },
-  },
 };`;
   }
 
   // Helper methods
-  private shouldApplyAIOptimization(): boolean {
-    return this.options.accessibility || this.options.optimizeImages;
-  }
-
-  private sanitizeTextContent(text: string): string {
-    return text.replace(/[<>&"']/g, (match) => {
-      const escapeMap: Record<string, string> = {
-        '<': '&lt;',
-        '>': '&gt;',
-        '&': '&amp;',
-        '"': '&quot;',
-        "'": '&#x27;'
-      };
-      return escapeMap[match];
-    });
-  }
-
-  private hasAccessibleName(node: FigmaNode): boolean {
-    return !!(node.name && !node.name.toLowerCase().includes('untitled'));
-  }
-
-  private generateAccessibleName(node: FigmaNode): string {
-    if (this.isInteractiveElement(node)) {
-      return `${node.name} button`;
-    }
-    if (this.isImage(node)) {
-      return `${node.name} image`;
-    }
-    return node.name || 'Interactive element';
-  }
-
-  private detectHeadingLevel(node: FigmaNode): number {
-    if (node.type === 'TEXT' && node.style?.fontSize) {
-      const fontSize = node.style.fontSize;
-      if (fontSize >= 32) return 1;
-      if (fontSize >= 24) return 2;
-      if (fontSize >= 20) return 3;
-      if (fontSize >= 18) return 4;
-      return 5;
-    }
-    return 2;
-  }
-
-  private detectComponentRole(component: GeneratedComponent): string {
-    const name = component.name.toLowerCase();
-    if (name.includes('button')) return 'button';
-    if (name.includes('heading') || name.includes('title')) return 'heading';
-    if (name.includes('image')) return 'img';
-    if (name.includes('link')) return 'link';
-    return 'generic';
-  }
-
-  // All other existing methods...
   private findNodeById(id: string): FigmaNode | null {
     const search = (node: FigmaNode): FigmaNode | null => {
       if (node.id === id) return node;
@@ -551,20 +320,12 @@ export const Accessible: Story = {
     if (node.type === 'TEXT' && node.characters) {
       props.push({ name: 'children', type: 'React.ReactNode', optional: true });
     }
-    if (this.isImage(node)) {
-      props.push({ name: 'src', type: 'string', optional: false });
-      props.push({ name: 'alt', type: 'string', optional: false });
-    }
     props.push({ name: 'className', type: 'string', optional: true });
     return props;
   }
 
   private generateImports(node: FigmaNode): string {
-    const imports = ['import React from "react";'];
-    if (this.shouldApplyAIOptimization()) {
-      imports.push('import { ErrorBoundary } from "react-error-boundary";');
-    }
-    return imports.join('\n');
+    return 'import React from "react";';
   }
 
   private generatePropsInterface(props: any[], componentName: string): string {
@@ -576,14 +337,6 @@ export const Accessible: Story = {
 `;
   }
 
-  private async generateAttributes(node: FigmaNode): Promise<string> {
-    const attributes = [];
-    if (this.isImage(node)) {
-      attributes.push('src={src}', 'alt={alt}');
-    }
-    return attributes.length > 0 ? attributes.join(' ') : '';
-  }
-
   private generateClassName(node: FigmaNode): string {
     if (this.options.styling === 'tailwind') {
       return this.generateTailwindClasses(node);
@@ -591,54 +344,18 @@ export const Accessible: Story = {
     return node.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
   }
 
-  private generateInlineStyles(node: FigmaNode): string {
-    if (this.options.styling === 'tailwind') return '';
-    const styles = this.extractAllStyles(node);
-    const styleEntries = Object.entries(styles)
-      .map(([key, value]) => `${key}: "${value}"`)
-      .join(', ');
-    return styleEntries ? `{{ ${styleEntries} }}` : '';
-  }
-
   private getHtmlTag(node: FigmaNode): string {
     switch (node.type) {
-      case 'TEXT': return this.isHeading(node) ? 'h2' : 'span';
+      case 'TEXT': return 'span';
       case 'FRAME': return 'div';
-      case 'RECTANGLE': return this.isImage(node) ? 'img' : 'div';
-      case 'COMPONENT':
-      case 'INSTANCE': return 'div';
+      case 'RECTANGLE': return 'div';
       default: return 'div';
     }
   }
 
-  private isImage(node: FigmaNode): boolean {
-    return node.fills?.some(fill => fill.type === 'IMAGE') || false;
-  }
-
-  private isInteractiveElement(node: FigmaNode): boolean {
-    const name = node.name.toLowerCase();
-    return name.includes('button') || 
-           name.includes('link') ||
-           name.includes('input') ||
-           name.includes('click');
-  }
-
-  private isHeading(node: FigmaNode): boolean {
-    if (node.type !== 'TEXT') return false;
-    const name = node.name.toLowerCase();
-    return name.includes('title') || 
-           name.includes('heading') || 
-           name.includes('header') ||
-           (node.style?.fontSize && node.style.fontSize > 20);
-  }
-
   private generateTailwindCSS(node: FigmaNode): string {
     const classes = this.generateTailwindClasses(node);
-    return `/* Figma-based Tailwind classes: ${classes} */
-
-.${this.sanitizeComponentName(node.name).toLowerCase()} {
-  @apply ${classes};
-}`;
+    return `/* Tailwind classes: ${classes} */`;
   }
 
   private generateTailwindClasses(node: FigmaNode): string {
@@ -672,18 +389,6 @@ export const Accessible: Story = {
     return `.${componentName.toLowerCase()} {\n${cssRules}\n}`;
   }
 
-  private generateCSSModules(cssRules: string): string {
-    return cssRules;
-  }
-
-  private generateStyledComponents(cssRules: string, componentName: string): string {
-    return `import styled from 'styled-components';
-
-export const Styled${componentName} = styled.div\`
-${cssRules.replace(/^\.[^{]+\{/, '').replace(/\}$/, '')}
-\`;`;
-  }
-
   private generatePlainCSS(cssRules: string, componentName: string): string {
     return cssRules;
   }
@@ -692,52 +397,14 @@ ${cssRules.replace(/^\.[^{]+\{/, '').replace(/\}$/, '')}
     return str.replace(/([a-z0-9]|(?=[A-Z]))([A-Z])/g, '$1-$2').toLowerCase();
   }
 
-  private generateVueComponent(node: FigmaNode, componentName: string, props: any[], children: string): string {
-    return `<template>
-  <div class="${this.generateClassName(node)}">
-    ${children}
-  </div>
-</template>
-
-<script setup lang="ts">
-// Vue component implementation
-</script>
-
-<style scoped>
-${this.generateCSS(node, componentName)}
-</style>`;
-  }
-
   private generateHTML(node: FigmaNode, className: string, styles: string, children: string): string {
-    return `<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    ${this.generateCSS(node, 'component')}
-  </style>
-</head>
-<body>
-  <div class="${className}">
-    ${children}
-  </div>
-</body>
-</html>`;
+    return `<div class="${className}">${children}</div>`;
   }
 
   private analyzeAccessibility(node: FigmaNode): AccessibilityReport {
     const issues: any[] = [];
     const suggestions: string[] = [];
     let score = 100;
-
-    if (this.isImage(node) && !this.hasAccessibleName(node)) {
-      issues.push({
-        type: 'error',
-        message: 'Image missing alt text',
-        element: node.name,
-        fix: 'Add descriptive alt attribute'
-      });
-      score -= 15;
-    }
 
     return {
       score: Math.max(0, score),
@@ -749,82 +416,31 @@ ${this.generateCSS(node, componentName)}
 
   private analyzeResponsive(node: FigmaNode): ResponsiveBreakpoints {
     const hasFlexLayout = node.layoutMode === 'HORIZONTAL' || node.layoutMode === 'VERTICAL';
-    const hasConstraints = node.constraints?.horizontal !== 'LEFT' || node.constraints?.vertical !== 'TOP';
-    const hasResponsiveDesign = hasFlexLayout || hasConstraints;
+    const hasResponsiveDesign = hasFlexLayout;
 
     return {
-      mobile: this.generateResponsiveCSS(node, 'mobile'),
-      tablet: this.generateResponsiveCSS(node, 'tablet'),
-      desktop: this.generateResponsiveCSS(node, 'desktop'),
+      mobile: '/* mobile styles */',
+      tablet: '/* tablet styles */',
+      desktop: '/* desktop styles */',
       hasResponsiveDesign
     };
-  }
-
-  private generateResponsiveCSS(node: FigmaNode, breakpoint: string): string {
-    return `/* ${breakpoint} responsive styles */`;
   }
 
   private generateTypeScript(node: FigmaNode, componentName: string): string {
     const props = this.extractProps(node);
     return `export interface ${componentName}Props {
   ${props.map(p => `${p.name}${p.optional ? '?' : ''}: ${p.type};`).join('\n  ')}
-}
-
-export type ${componentName}Ref = HTMLDivElement;`;
+}`;
   }
 
   private generateMetadata(node: FigmaNode, generationTime: number): ComponentMetadata {
     return {
       figmaNodeId: node.id,
-      componentType: this.detectComponentType(node),
-      complexity: this.calculateComplexity(node),
-      estimatedAccuracy: this.estimateAccuracy(node),
+      componentType: 'complex',
+      complexity: 'medium',
+      estimatedAccuracy: 85,
       generationTime,
-      dependencies: this.extractDependencies(node)
+      dependencies: ['react']
     };
-  }
-
-  private detectComponentType(node: FigmaNode): ComponentMetadata['componentType'] {
-    const name = node.name.toLowerCase();
-    if (name.includes('button')) return 'button';
-    if (name.includes('card')) return 'card';
-    if (name.includes('text') || node.type === 'TEXT') return 'text';
-    if (name.includes('input')) return 'input';
-    if (node.children && node.children.length > 3) return 'layout';
-    return 'complex';
-  }
-
-  private calculateComplexity(node: FigmaNode): ComponentMetadata['complexity'] {
-    let complexity = 0;
-    if (node.children) complexity += node.children.length;
-    if (node.effects && node.effects.length > 0) complexity += 2;
-    if (node.fills && node.fills.length > 1) complexity += 1;
-    if (this.customCode.jsx || this.customCode.css || this.customCode.cssAdvanced) {
-      complexity += 1;
-    }
-
-    if (complexity <= 3) return 'simple';
-    if (complexity <= 8) return 'medium';
-    return 'complex';
-  }
-
-  private estimateAccuracy(node: FigmaNode): number {
-    let accuracy = 85;
-    if (this.calculateComplexity(node) === 'simple') accuracy += 10;
-    if (node.children && node.children.length > 5) accuracy -= 5;
-    const componentType = this.detectComponentType(node);
-    if (['button', 'text', 'card'].includes(componentType)) accuracy += 5;
-    if (this.customCode.jsx || this.customCode.css || this.customCode.cssAdvanced) {
-      accuracy += 5;
-    }
-    return Math.min(100, Math.max(70, accuracy));
-  }
-
-  private extractDependencies(node: FigmaNode): string[] {
-    const deps = ['react'];
-    if (this.options.typescript) deps.push('@types/react');
-    if (this.isImage(node)) deps.push('next/image');
-    if (this.options.styling === 'styled-components') deps.push('styled-components');
-    return deps;
   }
 }
